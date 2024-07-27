@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
+	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
 )
@@ -29,12 +30,14 @@ func DockerAPI(deployRequest DeployRequest) {
 	}
 	defer dockerClient.Close()
 
-	buildImage(dockerClient, deployRequest)
+	imageName := namesgenerator.GetRandomName(0)
 
-	startContainer(dockerClient, ctx, deployRequest)
+	buildImage(dockerClient, deployRequest, imageName)
+
+	startContainer(dockerClient, ctx, deployRequest, imageName)
 }
 
-func buildImage(dockerClient *client.Client, deployRequest DeployRequest) {
+func buildImage(dockerClient *client.Client, deployRequest DeployRequest, imageName string) {
 	dockerBuildContext := GetContext("./Dockerfile")
 	// docker build --build-arg GIT_URL=https://github.com/theankitbhardwaj/latest-wayback-snapshot-redis.git --build-arg BUILD_CMD="go build -tags netgo -ldflags '-s -w' -o myService" --build-arg START_CMD="./myService" -t go-webservice .
 	buildArgs := make(map[string]*string)
@@ -43,9 +46,8 @@ func buildImage(dockerClient *client.Client, deployRequest DeployRequest) {
 	buildArgs["PORT"] = deployRequest.Port
 	buildArgs["BUILD_CMD"] = deployRequest.Build_CMD
 	buildArgs["START_CMD"] = deployRequest.Start_CMD
-
 	buildOptions := types.ImageBuildOptions{
-		Tags:      []string{"go-ascend"}, // TODO: Randomly generate this tag, this will be the subdomain for the user
+		Tags:      []string{imageName}, // TODO: Randomly generate this tag, this will be the subdomain for the user
 		Remove:    true,
 		BuildArgs: buildArgs,
 		NoCache:   true,
@@ -59,7 +61,7 @@ func buildImage(dockerClient *client.Client, deployRequest DeployRequest) {
 	defer buildResponse.Body.Close()
 }
 
-func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest DeployRequest) {
+func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest DeployRequest, imageName string) {
 	portBindings := make(nat.PortMap)
 	var sb strings.Builder
 	if deployRequest.Port != nil {
@@ -77,7 +79,7 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 	portBindings[nat.Port(containerPort)] = bindings
 
 	resp, err := dockerClient.ContainerCreate(ctx, &container.Config{
-		Image: "go-ascend",
+		Image: imageName,
 	}, &container.HostConfig{
 		PortBindings: portBindings,
 		NetworkMode:  "bridge",
