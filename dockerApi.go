@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -38,9 +39,10 @@ func buildImage(dockerClient *client.Client, deployRequest DeployRequest) {
 	// docker build --build-arg GIT_URL=https://github.com/theankitbhardwaj/latest-wayback-snapshot-redis.git --build-arg BUILD_CMD="go build -tags netgo -ldflags '-s -w' -o myService" --build-arg START_CMD="./myService" -t go-webservice .
 	buildArgs := make(map[string]*string)
 
-	buildArgs["GIT_URL"] = &deployRequest.Git_URL
-	buildArgs["PORT"] = &deployRequest.Port
-	// TODO: Send custom build and start commands
+	buildArgs["GIT_URL"] = deployRequest.Git_URL
+	buildArgs["PORT"] = deployRequest.Port
+	buildArgs["BUILD_CMD"] = deployRequest.Build_CMD
+	buildArgs["START_CMD"] = deployRequest.Start_CMD
 
 	buildOptions := types.ImageBuildOptions{
 		Tags:      []string{"go-ascend"}, // TODO: Randomly generate this tag, this will be the subdomain for the user
@@ -59,7 +61,16 @@ func buildImage(dockerClient *client.Client, deployRequest DeployRequest) {
 
 func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest DeployRequest) {
 	portBindings := make(nat.PortMap)
-	containerPort := deployRequest.Port + "/tcp" // TODO: Better way to do this
+	var sb strings.Builder
+	if deployRequest.Port != nil {
+		sb.WriteString(*deployRequest.Port)
+		sb.WriteString("/tcp")
+	} else {
+		sb.WriteString("8080/tcp")
+	}
+
+	containerPort := sb.String()
+
 	bindings := []nat.PortBinding{
 		{HostIP: "", HostPort: "5562"}, //TODO: Get this host port dynamically
 	}
