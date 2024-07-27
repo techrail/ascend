@@ -4,7 +4,9 @@ import (
 	"context"
 	"io"
 	"log"
+	"net"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/docker/docker/api/types"
@@ -47,7 +49,7 @@ func buildImage(dockerClient *client.Client, deployRequest DeployRequest, imageN
 	buildArgs["BUILD_CMD"] = deployRequest.Build_CMD
 	buildArgs["START_CMD"] = deployRequest.Start_CMD
 	buildOptions := types.ImageBuildOptions{
-		Tags:      []string{imageName}, // TODO: Randomly generate this tag, this will be the subdomain for the user
+		Tags:      []string{imageName},
 		Remove:    true,
 		BuildArgs: buildArgs,
 		NoCache:   true,
@@ -73,8 +75,14 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 
 	containerPort := sb.String()
 
+	hostPort, err := GetFreePort()
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	bindings := []nat.PortBinding{
-		{HostIP: "", HostPort: "5562"}, //TODO: Get this host port dynamically
+		{HostIP: "", HostPort: hostPort}, //TODO: Get this host port dynamically
 	}
 	portBindings[nat.Port(containerPort)] = bindings
 
@@ -108,4 +116,17 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 	}
 
 	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+}
+
+// GetFreePort asks the kernel for a free open port that is ready to use.
+func GetFreePort() (port string, err error) {
+	var a *net.TCPAddr
+	if a, err = net.ResolveTCPAddr("tcp", "localhost:0"); err == nil {
+		var l *net.TCPListener
+		if l, err = net.ListenTCP("tcp", a); err == nil {
+			defer l.Close()
+			return strconv.Itoa(l.Addr().(*net.TCPAddr).Port), nil
+		}
+	}
+	return
 }
