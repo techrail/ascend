@@ -1,4 +1,4 @@
-package main
+package deploy
 
 import (
 	"context"
@@ -16,6 +16,8 @@ import (
 	"github.com/docker/docker/pkg/namesgenerator"
 	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/docker/go-connections/nat"
+	"github.com/techrail/ascend/constants"
+	"github.com/techrail/ascend/models"
 )
 
 func GetContext(filePath string) io.Reader {
@@ -23,7 +25,7 @@ func GetContext(filePath string) io.Reader {
 	return ctx
 }
 
-func DockerAPI(deployRequest DeployRequest) {
+func DockerAPI(deployRequest models.DeployRequest) {
 	log.Print("Hello Docker")
 	ctx := context.Background()
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -39,15 +41,15 @@ func DockerAPI(deployRequest DeployRequest) {
 	startContainer(dockerClient, ctx, deployRequest, imageName)
 }
 
-func buildImage(dockerClient *client.Client, deployRequest DeployRequest, imageName string) {
+func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest, imageName string) {
 	dockerBuildContext := GetContext("./Dockerfile")
 	// docker build --build-arg GIT_URL=https://github.com/theankitbhardwaj/latest-wayback-snapshot-redis.git --build-arg BUILD_CMD="go build -tags netgo -ldflags '-s -w' -o myService" --build-arg START_CMD="./myService" -t go-webservice .
 	buildArgs := make(map[string]*string)
 
-	buildArgs["GIT_URL"] = deployRequest.Git_URL
-	buildArgs["PORT"] = deployRequest.Port
-	buildArgs["BUILD_CMD"] = deployRequest.Build_CMD
-	buildArgs["START_CMD"] = deployRequest.Start_CMD
+	buildArgs["GIT_URL"] = &deployRequest.RepositoryUrl
+	buildArgs["PORT"] = &deployRequest.Port
+	buildArgs["BUILD_CMD"] = &deployRequest.BuildCommand
+	buildArgs["START_CMD"] = &deployRequest.StartCommand
 	buildOptions := types.ImageBuildOptions{
 		Tags:      []string{imageName},
 		Remove:    true,
@@ -63,14 +65,13 @@ func buildImage(dockerClient *client.Client, deployRequest DeployRequest, imageN
 	defer buildResponse.Body.Close()
 }
 
-func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest DeployRequest, imageName string) {
+func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest models.DeployRequest, imageName string) {
 	portBindings := make(nat.PortMap)
 	var sb strings.Builder
-	if deployRequest.Port != nil {
-		sb.WriteString(*deployRequest.Port)
-		sb.WriteString("/tcp")
+	if deployRequest.Port != "" {
+		sb.WriteString(deployRequest.Port + "/tcp")
 	} else {
-		sb.WriteString("8080/tcp")
+		sb.WriteString(constants.DockerDefaultProtocolAndPort)
 	}
 
 	containerPort := sb.String()
@@ -90,7 +91,7 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 		Image: imageName,
 	}, &container.HostConfig{
 		PortBindings: portBindings,
-		NetworkMode:  "bridge",
+		NetworkMode:  constants.DockerDefaultNetworkMode,
 	}, nil, nil, "")
 
 	if err != nil {
