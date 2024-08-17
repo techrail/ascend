@@ -46,10 +46,13 @@ func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest,
 	// docker build --build-arg GIT_URL=https://github.com/theankitbhardwaj/latest-wayback-snapshot-redis.git --build-arg BUILD_CMD="go build -tags netgo -ldflags '-s -w' -o myService" --build-arg START_CMD="./myService" -t go-webservice .
 	buildArgs := make(map[string]*string)
 
-	buildArgs["GIT_URL"] = &deployRequest.RepositoryUrl
-	buildArgs["PORT"] = &deployRequest.Port
-	buildArgs["BUILD_CMD"] = &deployRequest.BuildCommand
-	buildArgs["START_CMD"] = &deployRequest.StartCommand
+	executableName := extractExecutableNameFromBuildCommand(deployRequest.BuildCommand)
+
+	buildArgs["GIT_URL"] = deployRequest.RepositoryUrl
+	buildArgs["PORT"] = deployRequest.Port
+	buildArgs["BUILD_CMD"] = deployRequest.BuildCommand
+	buildArgs["START_CMD"] = deployRequest.StartCommand
+	buildArgs["EXEC_NAME"] = &executableName
 	buildOptions := types.ImageBuildOptions{
 		Tags:      []string{imageName},
 		Remove:    true,
@@ -68,8 +71,9 @@ func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest,
 func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest models.DeployRequest, imageName string) {
 	portBindings := make(nat.PortMap)
 	var sb strings.Builder
-	if deployRequest.Port != "" {
-		sb.WriteString(deployRequest.Port + "/tcp")
+	if deployRequest.Port != nil {
+		sb.WriteString(*deployRequest.Port)
+		sb.WriteString("/tcp")
 	} else {
 		sb.WriteString(constants.DockerDefaultProtocolAndPort)
 	}
@@ -130,4 +134,10 @@ func GetFreePort() (port string, err error) {
 		}
 	}
 	return
+}
+
+func extractExecutableNameFromBuildCommand(buildCommand *string) string {
+	commands := strings.Fields(*buildCommand)
+	executable := commands[len(commands)-1]
+	return executable
 }

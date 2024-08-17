@@ -22,10 +22,11 @@ ARG START_CMD="./app"
 ENV START_CMD=${START_CMD} 
 ARG PORT="8080"
 ENV PORT=${PORT}
+ENV EXEC_NAME=${EXEC_NAME}
 
 WORKDIR /root/
 
-COPY --from=builder /app/ .
+COPY --from=builder /app/${EXEC_NAME} .
 
 EXPOSE ${PORT}
 
