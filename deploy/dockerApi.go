@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -47,6 +48,8 @@ func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest,
 	buildArgs := make(map[string]*string)
 
 	executableName := extractExecutableNameFromBuildCommand(deployRequest.BuildCommand)
+
+	fmt.Println(executableName)
 
 	buildArgs["GIT_URL"] = deployRequest.RepositoryUrl
 	buildArgs["PORT"] = deployRequest.Port
@@ -138,6 +141,11 @@ func GetFreePort() (port string, err error) {
 
 func extractExecutableNameFromBuildCommand(buildCommand *string) string {
 	commands := strings.Fields(*buildCommand)
-	executable := commands[len(commands)-1]
-	return executable
+
+	for i, part := range commands {
+		if part == "-o" && i+1 < len(commands) {
+			return commands[i+1]
+		}
+	}
+	return constants.GoDefaultExecutableName
 }
