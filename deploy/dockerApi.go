@@ -90,15 +90,18 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 	}
 
 	bindings := []nat.PortBinding{
-		{HostIP: "", HostPort: hostPort}, //TODO: Get this host port dynamically
+		{HostIP: "", HostPort: hostPort},
 	}
 	portBindings[nat.Port(containerPort)] = bindings
+
+	resources := setContainerResources(deployRequest)
 
 	resp, err := dockerClient.ContainerCreate(ctx, &container.Config{
 		Image: imageName,
 	}, &container.HostConfig{
 		PortBindings: portBindings,
 		NetworkMode:  constants.DockerDefaultNetworkMode,
+		Resources:    *resources,
 	}, nil, nil, "")
 
 	if err != nil {
@@ -148,4 +151,16 @@ func extractExecutableNameFromBuildCommand(buildCommand *string) string {
 		}
 	}
 	return constants.GoDefaultExecutableName
+}
+
+func setContainerResources(deployRequest models.DeployRequest) *container.Resources {
+	resources := container.Resources{}
+
+	if deployRequest.MemoryLimit != nil {
+		resources.Memory = *deployRequest.MemoryLimit
+	} else {
+		resources.Memory = constants.DockerContainerMemoryLimit
+	}
+
+	return &resources
 }
