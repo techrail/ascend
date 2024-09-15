@@ -6,4 +6,5 @@ type DeployRequest struct {
 	StartCommand  *string `json:"startCommand"`
 	Port          *string `json:"port"`
 	Branch        string  `json:"branch"`
+	MemoryLimit   *int64  `json:"memoryLimit"`
 }
