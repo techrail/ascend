@@ -12,6 +12,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/archive"
 	"github.com/docker/docker/pkg/namesgenerator"
@@ -96,12 +97,15 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 
 	resources := setContainerResources(deployRequest)
 
+	mounts := setContainerMounts(deployRequest)
+
 	resp, err := dockerClient.ContainerCreate(ctx, &container.Config{
 		Image: imageName,
 	}, &container.HostConfig{
 		PortBindings: portBindings,
 		NetworkMode:  constants.DockerDefaultNetworkMode,
 		Resources:    *resources,
+		Mounts:       mounts,
 	}, nil, nil, "")
 
 	if err != nil {
@@ -163,4 +167,39 @@ func setContainerResources(deployRequest models.DeployRequest) *container.Resour
 	}
 
 	return &resources
+}
+
+func setContainerMounts(deployRequest models.DeployRequest) []mount.Mount {
+	if deployRequest.Mounts == nil {
+		return nil
+	}
+
+	var mounts []mount.Mount
+
+	for _, v := range *deployRequest.Mounts {
+		var m mount.Mount
+		m.Source = v.Source
+		m.Target = v.Target
+		m.Type = getMountType(v.Type)
+		mounts = append(mounts, m)
+	}
+
+	return mounts
+}
+
+func getMountType(mt string) mount.Type {
+	switch strings.ToLower(mt) {
+	case "bind":
+		return mount.TypeBind
+	case "volume":
+		return mount.TypeVolume
+	case "cluster":
+		return mount.TypeCluster
+	case "namedpipe":
+		return mount.TypeNamedPipe
+	case "tmpfs":
+		return mount.TypeTmpfs
+	default:
+		return mount.TypeBind
+	}
 }
