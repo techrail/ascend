@@ -166,6 +166,10 @@ func setContainerResources(deployRequest models.DeployRequest) *container.Resour
 		resources.Memory = constants.DockerContainerMemoryLimit
 	}
 
+	if deployRequest.CPUs != nil {
+		resources.NanoCPUs = int64(*deployRequest.CPUs * float64(1e+9))
+	}
+
 	return &resources
 }
 
