@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
@@ -50,8 +51,6 @@ func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest,
 
 	executableName := extractExecutableNameFromBuildCommand(deployRequest.BuildCommand)
 
-	fmt.Println(executableName)
-
 	buildArgs["GIT_URL"] = deployRequest.RepositoryUrl
 	buildArgs["PORT"] = deployRequest.Port
 	buildArgs["BUILD_CMD"] = deployRequest.BuildCommand
@@ -63,11 +62,21 @@ func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest,
 		BuildArgs: buildArgs,
 		NoCache:   true,
 	}
+	log.Printf("I#23MJZ0 - Docker build started for image: %v\n", imageName)
 	buildResponse, err := dockerClient.ImageBuild(context.Background(), dockerBuildContext, buildOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
-	io.Copy(os.Stdout, buildResponse.Body)
+
+	createLogsDirectory()
+
+	file, err := os.Create(fmt.Sprintf("%v/%v_ImageBuild_%v.log", constants.ContainerLogsDirectory, imageName, time.Now().Format("20060102150405")))
+
+	if err != nil {
+		log.Panicln("P#23M32K - ", err)
+	}
+
+	io.Copy(file, buildResponse.Body)
 
 	defer buildResponse.Body.Close()
 }
@@ -112,25 +121,32 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 		log.Fatal(err)
 	}
 
+	log.Printf("I#23MK1B - Container started for image : %v\n", imageName)
 	if err := dockerClient.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
 		log.Fatal(err)
 	}
 
-	statusCh, errCh := dockerClient.ContainerWait(ctx, resp.ID, container.WaitConditionNotRunning)
+	statusCh, errCh := dockerClient.ContainerWait(ctx, resp.ID, container.WaitConditionNextExit)
+	out, err1 := dockerClient.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, Follow: true})
+	if err1 != nil {
+		log.Panic(err1)
+	}
+
+	file, err := os.Create(fmt.Sprintf("%v/%v_%v.log", constants.ContainerLogsDirectory, imageName, time.Now().Format("20060102150405")))
+	if err != nil {
+		log.Panicln("P#23M32K - ", err)
+	}
+
 	select {
 	case err := <-errCh:
 		if err != nil {
-			log.Fatal(err)
+			log.Panic(err)
 		}
-	case <-statusCh:
+	case status := <-statusCh:
+		log.Printf("I#23M3DC - %v", status.StatusCode)
+	default:
+		stdcopy.StdCopy(file, os.Stderr, out)
 	}
-
-	out, err1 := dockerClient.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true})
-	if err1 != nil {
-		log.Fatal(err1)
-	}
-
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
 }
 
 // GetFreePort asks the kernel for a free open port that is ready to use.
@@ -205,5 +221,14 @@ func getMountType(mt string) mount.Type {
 		return mount.TypeTmpfs
 	default:
 		return mount.TypeBind
+	}
+}
+
+func createLogsDirectory() {
+	if _, err := os.Stat(constants.ContainerLogsDirectory); os.IsNotExist(err) {
+		err := os.Mkdir(constants.ContainerLogsDirectory, 0777)
+		if err != nil {
+			log.Panicln("P#23M30E - ", err)
+		}
 	}
 }
