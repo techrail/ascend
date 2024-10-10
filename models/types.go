@@ -14,4 +14,5 @@ type DeployRequest struct {
 	Branch        string   `json:"branch"`
 	MemoryLimit   *int64   `json:"memoryLimit"`
 	Mounts        *[]Mount `json:"mounts"`
+	CPUs          *float64 `json:"cpus"`
 }
