@@ -20,7 +20,19 @@ func HandleDeploy(ctx *fasthttp.RequestCtx) {
 		ctx.Error("Invalid request body structure", fasthttp.StatusBadRequest)
 		return
 	}
-	go deploy.DockerAPI(deployRequest)
-	ctx.Response.SetStatusCode(fasthttp.StatusAccepted)
 
+	responseChan := make(chan models.DockerResponse)
+
+	go deploy.DockerAPI(deployRequest, responseChan)
+
+	res := <-responseChan
+	ctx.Response.Header.Set("Content-Type", "application/json")
+	if res.Error != nil {
+		ctx.Response.SetStatusCode(fasthttp.StatusBadRequest)
+		json.NewEncoder(ctx).Encode(res)
+	} else {
+		ctx.Response.SetStatusCode(fasthttp.StatusAccepted)
+		data, _ := json.Marshal(res)
+		ctx.SetBody(data)
+	}
 }
