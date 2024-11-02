@@ -16,3 +16,13 @@ type DeployRequest struct {
 	Mounts        *[]Mount `json:"mounts"`
 	CPUs          *float64 `json:"cpus"`
 }
+
+type DockerResponse struct {
+	Error *string         `json:"error,omitempty"`
+	Info  *DeploymentInfo `json:"info,omitempty"`
+}
+
+type DeploymentInfo struct {
+	ImageName string `json:"imageName"`
+	Port      string `json:"port"`
+}

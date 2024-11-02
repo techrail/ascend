@@ -28,12 +28,19 @@ func GetContext(filePath string) io.Reader {
 	return ctx
 }
 
-func DockerAPI(deployRequest models.DeployRequest) {
-	log.Print("Hello Docker")
+func DockerAPI(deployRequest models.DeployRequest, response chan models.DockerResponse) {
+	err := validateRequest(deployRequest)
+
+	if err != nil {
+		response <- models.DockerResponse{Error: stringPtr(fmt.Sprintf("%v", err))}
+		return
+	}
+
 	ctx := context.Background()
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 	defer dockerClient.Close()
 
@@ -41,12 +48,12 @@ func DockerAPI(deployRequest models.DeployRequest) {
 
 	buildImage(dockerClient, deployRequest, imageName)
 
-	startContainer(dockerClient, ctx, deployRequest, imageName)
+	dockerImageInfo := startContainer(dockerClient, ctx, deployRequest, imageName)
+	response <- models.DockerResponse{Info: &dockerImageInfo}
 }
 
 func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest, imageName string) {
 	dockerBuildContext := GetContext("./Dockerfile")
-	// docker build --build-arg GIT_URL=https://github.com/theankitbhardwaj/latest-wayback-snapshot-redis.git --build-arg BUILD_CMD="go build -tags netgo -ldflags '-s -w' -o myService" --build-arg START_CMD="./myService" -t go-webservice .
 	buildArgs := make(map[string]*string)
 
 	executableName := extractExecutableNameFromBuildCommand(deployRequest.BuildCommand)
@@ -81,7 +88,7 @@ func buildImage(dockerClient *client.Client, deployRequest models.DeployRequest,
 	defer buildResponse.Body.Close()
 }
 
-func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest models.DeployRequest, imageName string) {
+func startContainer(dockerClient *client.Client, ctx context.Context, deployRequest models.DeployRequest, imageName string) models.DeploymentInfo {
 	portBindings := make(nat.PortMap)
 	var sb strings.Builder
 	if deployRequest.Port != nil {
@@ -145,8 +152,10 @@ func startContainer(dockerClient *client.Client, ctx context.Context, deployRequ
 	case status := <-statusCh:
 		log.Printf("I#23M3DC - %v", status.StatusCode)
 	default:
-		stdcopy.StdCopy(file, os.Stderr, out)
+		go stdcopy.StdCopy(file, os.Stderr, out)
 	}
+
+	return models.DeploymentInfo{ImageName: imageName, Port: hostPort}
 }
 
 // GetFreePort asks the kernel for a free open port that is ready to use.
@@ -231,4 +240,24 @@ func createLogsDirectory() {
 			log.Panicln("P#23M30E - ", err)
 		}
 	}
+}
+
+func validateRequest(deployRequest models.DeployRequest) error {
+	if deployRequest.RepositoryUrl == nil {
+		return fmt.Errorf("repository url not provided")
+	}
+
+	if deployRequest.MemoryLimit != nil && *deployRequest.MemoryLimit < int64(constants.DockerContainerMinMemoryLimit) {
+		return fmt.Errorf("minimum memory limit allowed is 6mb")
+	}
+
+	if deployRequest.CPUs != nil && *deployRequest.CPUs < constants.DockerContainerMinCPULimit {
+		return fmt.Errorf("minimum cpu limit allowed is 0.01")
+	}
+
+	return nil
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
